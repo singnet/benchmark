@@ -1526,8 +1526,8 @@ compiler: gcc version 6.3.0
   getIncomingSet    2086       2530         2530
   getOutgoingSet   45.6K      52.7K        46.7K
   addNode            315        383          361
-  addLink            142        135           76       wtf!????
-  addLink            142        135          184       A hah!
+  addLink -A         142        135           76       wtf!????
+  addLink -m         142        135          184       A hah!
   removeAtom         573        705          924
 
 addLink: two different results, based on whether the test is run with
@@ -1580,7 +1580,7 @@ Remarks:
     with this version of guile. There is some thread-race bug.)
 * Comparing 2016 to today's 2.2.2.1 results: things are a little
     bit faster. However, the guile benchmark had to be redesigned,
-    recoded, so this may be de to benchmark changes.
+    recoded, so this may be due to benchmark changes.
 * Comparing 2.2.2.1 to 2.9.1: OK, so its a little bit faster,
     but not show-stopping.
 
@@ -1668,3 +1668,225 @@ except for addLink, which is only 2x better.  Clearly, link disambig
 remains a challenge, bottle-necked in the AtomTable code.
 
 TODO: measure getHandle() time ...
+
+======================================================================
+
+11 Dec 2019
+-----------
+New core baseline. Fanny.  The atomspace source is unchanged (mostly; I
+think) The only expected changes are due to compiler differences.
+Conclude: the compiler didn't make a difference.
+
+May 2019 compiler: gcc version 6.3.0 (Debian 6.3.0-18+deb9u1) 6.3.0 20170516
+            glibc: ldconfig -V (Debian GLIBC 2.24-11+deb9u4) 2.24
+
+Dec 2019 compiler: gcc (Debian 8.3.0-6) 8.3.0
+            glibc: ldconfig -V (Debian GLIBC 2.28-10) 2.28
+
+./atomspace_bm -A -n 4000000
+
+                     -A          -A           -A
+   test            Nov 2018    May 2019      Today
+   name            K-ops/sec   K-ops/sec      2019         Comments
+   ----            ---------   ---------      ----      -----------------
+  noop          1.82e6       2.15e6        1.67e6
+  getType         105K          98K           97K
+  getTV             4567         4578          4546
+  setTV              271         1075          1180
+  pointerCast      11.2K        11.5K         11.3K
+  getIncomingSet    2530         3091          3078
+  getOutgoingSet   46.7K        52.3K         49.2K
+  addNode            361          364           360
+  addLink -A          76           85            83
+  addLink -m         184          165           153
+  removeAtom         924         1141          1091
+
+Conclude: the compiler didn't make a difference. Well, maybe a small
+difference, everything seems about 1%-2% slower...
+
+11 Dec 2019
+-----------
+New core baseline. Fanny.  Change how AtomTable insertes atoms; avoid
+pointless copies. This improves addNode and addLink performance, but
+leaves the rest alone.
+
+May 2019 compiler: gcc version 6.3.0 (Debian 6.3.0-18+deb9u1) 6.3.0 20170516
+            glibc: ldconfig -V (Debian GLIBC 2.24-11+deb9u4) 2.24
+
+Dec 2019 compiler: gcc (Debian 8.3.0-6) 8.3.0
+            glibc: ldconfig -V (Debian GLIBC 2.28-10) 2.28
+
+./atomspace_bm -A -n 4000000
+
+                     -A          -A           -A
+   test            Nov 2018    May 2019      Today
+   name            K-ops/sec   K-ops/sec      2019         Comments
+   ----            ---------   ---------      ----      -----------------
+  noop          1.82e6       2.15e6        1.67e6       no change expected
+  getType         105K          98K           97K              "
+  getTV             4567         4578          4546            "
+  setTV              271         1075          1180            "
+  pointerCast      11.2K        11.5K         11.3K            "
+  getIncomingSet    2530         3091          3078            "
+  getOutgoingSet   46.7K        52.3K         49.2K            "
+  addNode            361          364           399        see notes
+  addLink -A          76           85           138            "
+  addLink -m         184          165           176            "
+  removeAtom         924         1141          1122            "
+
+Notes: addNode and addLink improved signficantly, because the AtomTable
+insertion process was revised, including avoiding un-needed work, and
+also taking over memory management of un-owned atoms.  The take-over is
+particularly noticable for links, which avoided a copy.
+
+Conclude: Reorganizing the AtomTable insertion process, and taking over
+memory management of un-owned atoms provides a decent win.
+
+=====================================================================
+
+13 Dec 2019
+-----------
+New guile baseline. Fanny.
+Compare 2.9.1 (which never worked) vs 2.9.2 (which works well)
+vs. 2.9.7 (the latest as of today)
+First, a compare of the interpreter, vs. previous Dec 2018 benchmark.
+
+atomspace_bm -A -g -n2000 -r100
+
+                  guile      guile      guile      guile
+                 2.2.2.1     2.9.1      2.9.2      2.9.7     above raw
+                -g -r100   -g -r100   -g -r100    -g -r100      -A
+   test          interp     interp     interp       interp   AtomSpace
+   name         K-ops/sec  K-ops/sec  K-ops/sec  K-ops/sec   K-ops/sec
+   ----         ---------  ---------  ---------  ---------   ---------
+  noop             3e6        3e6        2.8e6      2.9e6   1.67e6
+  getType          26.4       31.1       41.2       42.5       97K
+  getTV            28.1       25.4       44.9       44.0        4546
+  setTV            13.4       16.8       20.5       19.6        1180
+  getIncomingSet   28.5       45.5       46.9       45.1        3078
+  getOutgoingSet   29.1       35.5       44.6       46.1       49.2K
+  addNode          20.0       19.4       29.4       29.0         399
+  addLink          14.4       16.2       24.8       19.2         176
+  removeAtom       20.0       22.7       31.5       28.5        1122
+
+Remarks:
+* Column labelled 2.9.1 is for Ubuntu Xenial 16.04 LTS
+    gcc (Ubuntu 5.4.0-6ubuntu1~16.04.10) 5.4.0 20160609
+    guile 2.9.1 as tagged by Wingo, October 2018
+    (Note that, at this time, AtomSpace unit tests do not pass
+    with this version of guile. There is some thread-race bug.)
+* Column labelled 2.9.2 is for Debian Stable (aka Version 10, Buster)
+    gcc (Debian 8.3.0-6) 8.3.0
+    guile 2.9.2 as tagged by Wingo, May 23 21:05:21 2019
+    ldconfig (Debian GLIBC 2.28-10) 2.28
+* Column labelled 2.9.7 - as above, but tagged Dec 13 13:57:04 2019
+* Comparing 2.9.1 to 2.9.2: pleasantly improved.
+* Comparing 2.9.2 to 2.9.7: no discernable change.
+
+--------------------------------
+
+Next, a comparison of the compiled performance
+
+                  2.2.2.1      2.9.1     2.9.2    2.9.7      above raw
+                -g -C -r100 -g -C -r100 -C -r100  -r100         -A
+   test           compile    compile    compile    compile   AtomSpace
+   name          K-ops/sec  K-ops/sec  K-ops/sec  K-ops/sec  K-ops/sec
+   ----          ---------  ---------  ---------  ---------  ---------
+  noop             3e6        3e6        3e6        2e6     1.82e6
+  getType          460        715        444        450        97K
+  getTV            447        819        418        458         4546
+  setTV            262        344        233        226         1180
+  getIncomingSet   424        822        517        513         3078
+  getOutgoingSet   501       1043        651        567        49.2K
+  addNode          269        250        380        368          399
+  addLink          127        145        181        203          176
+  removeAtom         9.23       3.51      94         84         1122
+
+Remarks:
+* Column labelled 2.9.1 is for Ubuntu Xenial 16.04 LTS
+    gcc (Ubuntu 5.4.0-6ubuntu1~16.04.10) 5.4.0 20160609
+    guile 2.9.1 as tagged by Wingo, October 2018
+    (Note that, at this time, AtomSpace unit tests do not pass
+    with this version of guile. There is some thread-race bug.)
+* Column labelled 2.9.2 is for Debian Stable (aka Version 10, Buster)
+    gcc (Debian 8.3.0-6) 8.3.0
+    guile 2.9.2 as tagged by Wingo, May 23 21:05:21 2019
+    ldconfig (Debian GLIBC 2.28-10) 2.28
+* Compare 2.9.1 vs. 2.9.2 -- why the backslide?
+    Except for addNode and addLink, which match the native c++
+    performance!?
+* Comparing 2.9.2 to 2.9.7: no discernable change.
+
+* The removeAtom benchmark is broken, because the lump of cog-delete
+    calls are deleting non-existent atoms, causing exceptions to be
+    thrown. So this is exception-overhead dominated.
+
+=====================================================================
+
+7 Jan 2020
+-----------
+New core baseline. Fanny.  Pull req #2466 - clean up cruft.
+
+May 2019 compiler: gcc version 6.3.0 (Debian 6.3.0-18+deb9u1) 6.3.0 20170516
+            glibc: ldconfig -V (Debian GLIBC 2.24-11+deb9u4) 2.24
+
+Dec 2019 compiler: gcc (Debian 8.3.0-6) 8.3.0
+            glibc: ldconfig -V (Debian GLIBC 2.28-10) 2.28
+
+./atomspace_bm -A -n 4000000
+
+                     -A          -A           -A
+   test            May 2019    Dec 2019    Today #2466
+   name            K-ops/sec   K-ops/sec      2020         Comments
+   ----            ---------   ---------      ----      -----------------
+  noop          2.15e6        1.67e6        2.03e6      no change expected
+  getType          98K           97K           98K             "
+  getTV             4578          4546          4580           "
+  setTV             1075          1180          1184           "
+  pointerCast      11.5K         11.3K         12.0K           "
+  getIncomingSet    3091          3078          3230           "
+  getOutgoingSet   52.3K         49.2K         51.3K           "
+  addNode            364           399           664       see notes
+  addLink -A          85           138           177           "
+  addLink -m         165           176           203           "
+  removeAtom        1141          1122          1347           "
+
+Notes: Pull req #2466 results in large improvements to addNode and
+addLink, due to removal of the `_atom_store` index from the AtomTable.
+Percentage-wise, this is particularly noticable for nodes, having made
+up a large fraction of that process. Conclude: #2466 is a big win.
+
+7 Jan 2020
+-----------
+And again: New core baseline. Fanny.  Pull req #2466 - clean up cruft.
+
+Dec 2019 compiler: gcc (Debian 8.3.0-6) 8.3.0
+            glibc: ldconfig -V (Debian GLIBC 2.28-10) 2.28
+
+./atomspace_bm -A -n 4000000
+
+                     -A          -A           -A
+   test            Dec 2019   Today #2466  Today #2469
+   name            K-ops/sec   K-ops/sec      2020         Comments
+   ----            ---------   ---------      ----      -----------------
+  noop           1.67e6        2.03e6       1.97e6      no change expected
+  getType           97K           98K          96K             "
+  getTV              4546          4580         4591           "
+  setTV              1180          1184         1144           "
+  pointerCast       11.3K         12.0K        11.7K           "
+  getIncomingSet     3078          3230         3393       see notes
+  getOutgoingSet    49.2K         51.3K        52.1K    no change expected
+  addNode             399           664         699            "
+  addLink -A          138           177         175            "
+  addLink -m          176           203         205            "
+  removeAtom         1122          1347        1225            "
+
+Notes: Expected getIncomingSet to imrpove more than it did. But OK,
+whatever. The change in addNode is more than expected; yes, it used
+to have LinkPtr<-->Handle casts in it. Oddly, no change to addLink.
+The pull req measured here, #2469, changed the IncomingSet to be Handle,
+not LinkPtr, and thus was expecting a gain from the avoided casts to
+and fro. Apparently, this didn't have as big an impact as imagined.
+Conclude: OK, whatever.
+
+-------------------------
