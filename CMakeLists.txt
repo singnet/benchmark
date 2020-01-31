@@ -49,13 +49,23 @@ ELSE (ATOMSPACE_FOUND)
 	MESSAGE(FATAL_ERROR "AtomSpace missing: it is needed for everything!")
 ENDIF (ATOMSPACE_FOUND)
 
+# URE
+FIND_PACKAGE(URE 1.0.0 CONFIG)
+IF (URE_FOUND)
+	MESSAGE(STATUS "URE found.")
+	SET(HAVE_URE 1)
+ELSE (URE_FOUND)
+	MESSAGE(STATUS "URE was not found. URE micro benchmarks will not be built.")
+ENDIF (URE_FOUND)
+
 # ----------------------------------------------------------
 # Google benchmark package (optional)
-FIND_PACKAGE(benchmark)
+FIND_PACKAGE(benchmark 1.3.0)
 IF (benchmark_FOUND)
+	SET(BUILD_MICRO 1)
 	MESSAGE(STATUS "Google Benchmark ${benchmark_VERSION} found.")
 ELSE (benchmark_FOUND)
-	MESSAGE(STATUS "Google Benchmark not found. Hint: see the README!")
+	MESSAGE(STATUS "Google Benchmark not found. Micro benchmarks will not be built.")
 ENDIF(benchmark_FOUND)
 
 # ----------------------------------------------------------
@@ -99,12 +109,13 @@ IF (3.4.0 VERSION_LESS ${PYTHON3_VERSION_STRING})
 ENDIF()
 
 FIND_PACKAGE(PythonLibs)
-IF (PYTHONLIBS_FOUND AND
-     ((PYTHON3INTERP_FOUND AND 3.4.0 VERSION_LESS ${PYTHONLIBS_VERSION_STRING})
+IF (PYTHONLIBS_FOUND)
+	IF ((PYTHON3INTERP_FOUND AND 3.4.0 VERSION_LESS ${PYTHONLIBS_VERSION_STRING})
      OR
-     (2.7.0 VERSION_LESS ${PYTHONLIBS_VERSION_STRING})))
-	SET (HAVE_PY_LIBS 1)
-	MESSAGE(STATUS "Python ${PYTHONLIBS_VERSION_STRING} libraries found.")
+     (2.7.0 VERSION_LESS ${PYTHONLIBS_VERSION_STRING}))
+		SET (HAVE_PY_LIBS 1)
+		MESSAGE(STATUS "Python ${PYTHONLIBS_VERSION_STRING} libraries found.")
+	ENDIF()
 ELSE()
 	MESSAGE(STATUS "Python libraries NOT found.")
 ENDIF()
@@ -113,7 +124,9 @@ ENDIF()
 # Add subdirectories
 
 ADD_SUBDIRECTORY(atomspace)
-ADD_SUBDIRECTORY(micro)
+IF (BUILD_MICRO)
+	ADD_SUBDIRECTORY(micro)
+ENDIF(BUILD_MICRO)
 ADD_SUBDIRECTORY(query-trite)
 
 # ===================================================================
@@ -122,5 +135,6 @@ ADD_SUBDIRECTORY(query-trite)
 SUMMARY_ADD("AtomSpace bench" "Synthetic benchmarks for AtomSpace methods" HAVE_ATOMSPACE)
 SUMMARY_ADD("Python bench" "Synthetic benchmarks for Python (cython) bindings" HAVE_CYTHON)
 SUMMARY_ADD("Scheme bench" "Synthetic benchmarks for Scheme (guile) bindings" HAVE_GUILE)
-SUMMARY_ADD("Micro bench" "Assorted microbenchmarks" benchmark_FOUND)
+SUMMARY_ADD("Micro bench" "Assorted microbenchmarks" BUILD_MICRO)
+SUMMARY_ADD("URE Micro bench" "URE microbenchmarks" BUILD_MICRO AND HAVE_URE)
 SUMMARY_SHOW()

@@ -16,6 +16,9 @@ commit a015b988246cd042cba836b30e050032fd5feca3
     Author: Nil Geisweiller <ngeiswei@gmail.com>
     Date:   Tue Jul 2 13:01:36 2019 +0300
 
+Not sure, I think the compiler was this (that's what it was in May...)
+compiler: gcc version 6.3.0 (Debian 6.3.0-18+deb9u1) 6.3.0 20170516
+glibc: ldconfig -V (Debian GLIBC 2.24-11+deb9u4) 2.24
 
 Repeated testing. Run as "guile -l nano-en.scm".
 Got this:
@@ -30,21 +33,89 @@ Elapsed: 126 secs Tot-cnt=152904 Avg=0.2188 secs/word Rate=1213.5 cnts/sec
 As can be seen, there is relatively little variation, from run to run,
 in the measured performance.
 
-Older atomspace
----------------
-For a baseline, lets run a version from a year ago...
+12 Dec 2019
+-----------
+Performance improves by a lot. But why? Going back to the above git
+version, but with today's compiler, shows:
 
-guile: guile (GNU Guile) 2.2.2.2-fc84f
-git log:
-    commit f9b9c8ce3f46f6349f4ad65fd85c974a031ad819
-    Merge: a0944c3 1dcf062
-    Author: Nil Geisweiller <ngeiswei@gmail.com>
-    Date:   Sat May 5 18:31:20 2018 +0300
+Elapsed: 87 secs Tot-cnt=152904 Avg=0.1510 secs/word Rate=1757.5 cnts/sec
+Elapsed: 88 secs Tot-cnt=152904 Avg=0.1528 secs/word Rate=1737.5 cnts/sec
+Elapsed: 89 secs Tot-cnt=152904 Avg=0.1545 secs/word Rate=1718.0 cnts/sec
 
-Got this:
-Elapsed: 18 secs Tot-cnt=1487 Avg=0.0313 secs/word Rate=82.611 cnts/sec
-Elapsed: 18 secs Tot-cnt=1481 Avg=0.0313 secs/word Rate=82.278 cnts/sec
+Compare to today's git (and today's compilers, etc.), below, which runs
+slightly slower (despite fixes to the AtomTable) (perhaps recent pattern
+matcher mods slowed things down?). So conclude: **all** of the perf
+improvement can be ascribed to either the compiler, or the different
+glibc version (the `perf_events` tool suggests that a lot of CPU time,
+about 16% of it, is spent in `std::__shared_ptr<opencog::Atom, etc`
+and another 5% is in `std::_Rb_tree<opencog::Handle, etc.`) So this is
+definitely a "wow" moment.
 
-Well, the rate is much much higher, but the total cunt is also wrong.
-Conclude: pattern matcher at that version had a serious bug in it,
-probably with the GlobNodes. Yes, there were GlobNode bugs back then...
+guile (GNU Guile) 2.9.2
+gcc version 8.3.0 (Debian 8.3.0-6)
+ldconfig (Debian GLIBC 2.28-10) 2.28
+git commit f96a6c7bd0c3c41e06668b810193cad4d2d6dc4c
+
+Three runs with *exactly* the same times:
+
+Elapsed: 89 secs Tot-cnt=152904 Avg=0.1545 secs/word Rate=1718.0 cnts/sec
+Elapsed: 89 secs Tot-cnt=152904 Avg=0.1545 secs/word Rate=1718.0 cnts/sec
+Elapsed: 89 secs Tot-cnt=152904 Avg=0.1545 secs/word Rate=1718.0 cnts/sec
+
+Again: with guile (GNU Guile) 2.9.7-dirty
+Elapsed: 89 secs Tot-cnt=152904 Avg=0.1545 secs/word Rate=1718.0 cnts/sec
+
+so no change at all for the newer guile version. Hmmm.
+
+-------------
+try this:
+HUGETLB_MORECORE=yes LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libhugetlbfs.so.0 guile -l nano-en.scm
+
+Wow! Even for this relatively small test, the difference is dramatic!
+Elapsed: 72 secs Tot-cnt=152904 Avg= 0.125 secs/word Rate=2123.7 cnts/sec
+Elapsed: 71 secs Tot-cnt=152904 Avg=0.1233 secs/word Rate=2153.6 cnts/sec
+Elapsed: 70 secs Tot-cnt=152904 Avg=0.1215 secs/word Rate=2184.3 cnts/sec
+
+-------------
+And again: on Ubuntu 16.04 LTS:
+gcc version 5.4.0 20160609 (Ubuntu 5.4.0-6ubuntu1~16.04.11)
+ldconfig (Ubuntu GLIBC 2.23-0ubuntu11) 2.23
+guile (GNU Guile) 2.9.2.36-89e28
+atomspace git: 6904dc0c2f0d3b122d46d5b00a6d28a0f2bfa279 (6 Sept 2019)
+
+Elapsed: 133 secs Tot-cnt=152904 Avg=0.2309 secs/word Rate=1149.7 cnts/sec
+Elapsed: 134 secs Tot-cnt=152904 Avg=0.2326 secs/word Rate=1141.1 cnts/sec
+Elapsed: 134 secs Tot-cnt=152904 Avg=0.2326 secs/word Rate=1141.1 cnts/sec
+
+and again, with todays atomspace git:
+git commit dc7bf87bdf51e0afd3a0870fd73f172bcd80239d
+
+Elapsed: 124 secs Tot-cnt=152904 Avg=0.2153 secs/word Rate=1233.1 cnts/sec
+Elapsed: 122 secs Tot-cnt=152904 Avg=0.2118 secs/word Rate=1253.3 cnts/sec
+Elapsed: 122 secs Tot-cnt=152904 Avg=0.2118 secs/word Rate=1253.3 cnts/sec
+
+Conclude: some atomspace changes made a difference. But also, the compiler
+and/or glibc is making a huge difference.
+
+5 Jan 2020
+----------
+After pull req opencog/atomspace#2464 which avoids some pointless
+IncomingSet wasteage, I now measure:
+
+Elapsed: 60 secs Tot-cnt=152904 Avg=0.1042 secs/word Rate=2548.4 cnts/sec
+Elapsed: 59 secs Tot-cnt=152904 Avg=0.1024 secs/word Rate=2591.6 cnts/sec
+Elapsed: 59 secs Tot-cnt=152904 Avg=0.1024 secs/word Rate=2591.6 cnts/sec
+
+Prior reesult for this was 72 secs (fanny, with hugetlb).
+
+13 Jan 2020
+-----------
+After rework on direct upward moves, now hitting
+
+Elapsed: 58 secs Tot-cnt=152904 Avg=0.1007 secs/word Rate=2636.3 cnts/sec
+
+Disabling #define DEBUG in the pattern matcher takes us down one more
+second:
+
+Elapsed: 57 secs Tot-cnt=152904 Avg=0.0990 secs/word Rate=2682.5 cnts/sec
+
