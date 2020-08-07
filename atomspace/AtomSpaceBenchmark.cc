@@ -478,7 +478,7 @@ void AtomSpaceBenchmark::startBenchmark(int numThreads)
         else {
             asp = new AtomSpace();
 #if HAVE_CYTHON
-            pyev = new PythonEval(asp);
+            pyev = new PythonEval();
             // And now ... create a Python instance of the atomspace.
             // Pass in the raw C++ atomspace address into cython.
             // Kind-of tacky, but I don't see any better way.
@@ -486,7 +486,7 @@ void AtomSpaceBenchmark::startBenchmark(int numThreads)
             // run on a different atomspace, than the one containing
             // all the atoms.  And that would give bad results.
             std::ostringstream dss;
-            dss << "from opencog.atomspace import AtomSpace, types, TruthValue, Atom" << std::endl;
+            dss << "from atomspace import AtomSpace, types, TruthValue, Atom" << std::endl;
             dss << "aspace = AtomSpace(" << asp << ")" << std::endl;
             pyev->eval(dss.str());
 #endif
@@ -597,10 +597,12 @@ Type AtomSpaceBenchmark::randomType(Type t)
     } while (!nameserver().isA(candidateType, t) or
         nameserver().isA(candidateType, BOOLEAN_LINK) or
         nameserver().isA(candidateType, FREE_LINK) or
+        nameserver().isA(candidateType, TYPE_INPUT_LINK) or
+        nameserver().isA(candidateType, TYPE_OUTPUT_LINK) or
         nameserver().isA(candidateType, NUMERIC_LINK) or
         nameserver().isA(candidateType, SCOPE_LINK) or
-        nameserver().isA(candidateType, TYPE_LINK) or
         nameserver().isA(candidateType, UNIQUE_LINK) or
+        nameserver().isA(candidateType, TYPED_VARIABLE_LINK) or
         candidateType == VARIABLE_LIST or
         candidateType == VARIABLE_SET or
         candidateType == DEFINE_LINK or
