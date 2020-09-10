@@ -1,5 +1,11 @@
 ;
-; bio-loop.scm
+; bio-loop2.scm
+;
+; Same as bio-loop.scm, but using MeetLink instead of GetLink,
+; so as to avoid both the SetLink, and it's deletion. That is,
+; MeetLink's return thier results in a QueueValue, and not in
+; a SetLink. So the code below is a cut-n-paste with some minor
+; edits to work with the Value instead of the Set.
 ;
 (use-modules (srfi srfi-1))
 (use-modules (opencog) (opencog exec))
@@ -13,7 +19,7 @@
 ;; and we are looking for two other genes that interact with the
 ;; endpoint and form a triangle.
 (define (find-output-interactors gene)
-	(Get
+	(Meet
 		(VariableList
 			(TypedVariable (Variable "$a") (Type 'GeneNode))
 			(TypedVariable (Variable "$b") (Type 'GeneNode))
@@ -36,7 +42,7 @@
 ;; participate in that pathway. These two are expressed with a pair
 ;; of genes that interact with one-another, forming a pentagon.
 (define (pathway-gene-interactors pathway)
-	(Get
+	(Meet
 		(VariableList
 			(TypedVariable (Variable "$g1") (Type 'GeneNode))
 			(TypedVariable (Variable "$g2") (Type 'GeneNode))
@@ -54,7 +60,7 @@
 ;; This defines a single edge search; one endpoint is the given
 ;; gene, the other is a pathway.
 (define (find-pathways gene)
-	(Get
+	(Meet
 		(TypedVariable (Variable "$p") (Type 'ConceptNode))
 		(Member gene (Variable "$p"))
 	))
@@ -73,7 +79,8 @@
 				; Perform the search
 				(define gene-secs (make-timer))
 				(define result (cog-execute! query))
-				(define rlen (cog-arity result))
+				(define result-list (cog-value->list result))
+				(define rlen (length result-list))
 
 				; Collect up some stats
 				; (cog-inc-count! gene rlen)
@@ -83,12 +90,11 @@
 						(define gene-b (cog-outgoing-atom gene-pair 1))
 						(cog-inc-count! gene-a 1)
 						(cog-inc-count! gene-b 1))
-					(cog-outgoing-set result))
+					result-list)
 
 				;; (format #t "Ran triangle ~A in ~6f seconds; got ~A results\n"
 				;; 	gene-name (gene-secs) rlen)
 				(display ".")
-				(cog-delete result)
 				(cons gene-name rlen)
 			)
 			gene-list))
@@ -116,7 +122,8 @@
 				; Perform the search
 				(define path-secs (make-timer))
 				(define result (cog-execute! query))
-				(define rlen (cog-arity result))
+				(define result-list (cog-value->list result))
+				(define rlen (length result-list))
 
 				; Collect up some stats
 				(cog-inc-count! pathway rlen)
@@ -130,12 +137,11 @@
 						(cog-inc-count! gene-b 1)
 						(cog-inc-count! prot-a 1)
 						(cog-inc-count! prot-b 1))
-					(cog-outgoing-set result))
+					result-list)
 
 				; (format #t "Ran path ~A in ~6f seconds; got ~A results\n"
 				; 	(cog-name pathway) (path-secs) rlen)
 				(display ".")
-				(cog-delete result)
 				(cons (cog-name pathway) rlen)
 			)
 			pathways))
@@ -161,10 +167,7 @@
 				(define gene (Gene gene-name))
 				(define query (find-pathways gene))
 				; Perform the search
-				(define path-set (cog-execute! query))
-				(define pathways (cog-outgoing-set path-set))
-				(cog-delete path-set)
-				pathways
+				(cog-value->list (cog-execute! query))
 			)
 			gene-list)))
 	(pentagon-benchmark pathways)
@@ -206,67 +209,3 @@
 (exit)
 
 ; =================================================================
-
-
-#! -----------------------------------------------------------------
-; Some stuff to create a ranked graph of the results found above.
-; Look in the directory called `dataset-notes`.
-
-(define (dump-to-csv pair-list filename)
-
-	; Sort according to descending rank.
-	(define sorted-counts (sort pair-list
-		(lambda (a b) (> (cdr a) (cdr b)))))
-
-	; Dump to file.
-	(define f (open-file filename "w"))
-	(define cnt 1)
-	(format f "#\n# ~A\n#\n# Rank-ordered counts\n#\n" filename)
-	(for-each
-		(lambda (gu) (format f "~A	~A	~A\n" cnt (car gu) (cdr gu))
-			(set! cnt (+ 1 cnt)))
-		sorted-counts)
-	(close f)
-)
-
-(dump-to-csv interaction-counts "gene-loops.csv")
-
-!# ; ---------------------------------------------------------------
-
-#! -----------------------------------------------------------------
-; Some stuff to create a ranked graph of the results found above.
-; Look in the directory called `dataset-notes`.
-
-; Genes that appeared in a triangular loop.
-(define loop-participants
-	(map (lambda (gene) (cons (cog-name gene) (cog-count gene)))
-		(filter (lambda (gene) (< 0 (cog-count gene)))
-			(cog-get-atoms 'GeneNode))))
-
-(dump-to-csv loop-participants "loop-participants.csv")
-
-; Genes that appeared in the pentagonal loop
-(define path-genes
-	(map (lambda (gene) (cons (cog-name gene) (cog-count gene)))
-		(filter (lambda (gene) (< 0 (cog-count gene)))
-			(cog-get-atoms 'GeneNode))))
-
-(dump-to-csv path-genes "path-genes.csv")
-
-(define path-proteins
-	(map (lambda (protein) (cons (cog-name protein) (cog-count protein)))
-		(filter (lambda (protein) (< 0 (cog-count protein)))
-			(cog-get-atoms 'MoleculeNode))))
-
-(dump-to-csv path-proteins "path-proteins.csv")
-
-(define path-loops
-	(map (lambda (pathway) (cons (cog-name pathway) (cog-count pathway)))
-		(filter (lambda (pathway) (< 0 (cog-count pathway)))
-			(cog-get-atoms 'ConceptNode))))
-
-(dump-to-csv path-loops "path-loops.csv")
-
-!# ; ---------------------------------------------------------------
-
-; ------------------------------------------------------------------
